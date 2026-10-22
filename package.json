@@ -10,6 +10,7 @@
     "author": "Vatsal Joshi <vatz88@gmail.com>",
     "license": "GPL-3.0",
     "private": true,
+    "packageManager": "yarn@1.22.22",
     "scripts": {
         "start": "npm run convert && npm run start:noconvert",
         "start:noconvert": "parcel src/index.html",
@@ -19,7 +20,8 @@
         "test": "jest tests"
     },
     "engines": {
-        "node": "^20"
+        "node": "^20",
+        "yarn": "1.22.22"
     },
     "browserslist": "> 0.5%, last 2 versions, not dead",
     "dependencies": {
