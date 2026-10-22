@@ -24,7 +24,7 @@
     "browserslist": "> 0.5%, last 2 versions, not dead",
     "dependencies": {
         "@fortawesome/fontawesome-free": "^6.4.2",
-        "@parcel/core": "^2.10.1",
+        "@parcel/core": "2.10.1",
         "@parcel/packager-raw-url": "2.10.1",
         "@parcel/transformer-sass": "2.10.1",
         "@parcel/transformer-webmanifest": "2.10.1",
@@ -38,7 +38,7 @@
         "html2canvas": "^1.4.1",
         "jquery": "3.7.1",
         "localforage": "^1.10.0",
-        "parcel": "^2.10.1",
+        "parcel": "2.10.1",
         "sass": "^1.69.5",
         "workbox-cli": "^7.0.0",
         "xlsx": "^0.18.5"
