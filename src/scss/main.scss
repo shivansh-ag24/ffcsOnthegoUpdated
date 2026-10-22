@@ -1,0 +1,106 @@
+/**
+ *  This style sheet contains the custom styling applied
+ *  to the document body that is common to all sections
+ *  or that doesn't fit into any particular section
+ */
+
+@import 'global/colors.scss';
+
+body {
+    padding-top: 5rem;
+    background-color: var(--background-color);
+}
+
+/*
+    Navigation bar
+ */
+.navbar {
+    box-shadow: 0 2px 5px #c2c6cc;
+}
+
+.navbar-brand {
+    color: var(--primary-color) !important;
+    font-weight: bold;
+}
+
+.nav-btn-outline {
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+    border-width: 2px;
+}
+
+.nav-btn-outline:hover {
+    color: var(--background-color);
+    border-color: var(--primary-color) !important;
+    background-color: var(--primary-color) !important;
+}
+
+.nav-btn-outline:active,
+.nav-btn-outline:focus,
+.nav-btn-outline.show {
+    color: var(--background-color);
+    border-color: var(--primary-dark-color) !important;
+    background-color: var(--primary-dark-color) !important;
+}
+
+/*
+    Custom blockquote
+ */
+blockquote > p::before {
+    content: '\f059';
+    font-family: 'Font Awesome 5 Free';
+    margin-right: 5px;
+}
+
+/*
+    Overriding bootstrap table style
+ */
+.table th,
+.table td {
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/*
+    Footer
+ */
+footer {
+    background-color: var(--primary-color);
+    color: var(--background-color);
+}
+
+/*
+    Disable text selection
+ */
+.noselect {
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    -khtml-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+}
+
+/*
+    Custom scrollbar
+ */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: var(--primary-light-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+}
+
+@media (max-width: 768px) {
+    /*
+        Remove x-axis padding on smaller devices
+     */
+    .container-xxl {
+        padding-left: 0;
+        padding-right: 0;
+    }
+}
