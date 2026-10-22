@@ -482,10 +482,14 @@ export function loadSavedTimetableIntoActive(savedTable) {
         // Switch view to simulator
         showSimulatorView(false);
 
-        // Switch campus if different
+        // Switch campus if different without triggering destructive page reload
         if (savedTable.campus && savedTable.campus.toLowerCase() !== (window.campus || '').toLowerCase()) {
+            window.campus = savedTable.campus;
             window.location.hash = '#' + savedTable.campus;
-            window.switchCampus();
+            $('#campus').text(savedTable.campus + ' Campus');
+            localforage.setItem('campus', window.campus);
+            if (window.getCourses) window.getCourses();
+            if (window.initializeTimetable) window.initializeTimetable();
         }
 
         // Add to active timetable storage

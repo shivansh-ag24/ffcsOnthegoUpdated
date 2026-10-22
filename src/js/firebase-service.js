@@ -41,9 +41,15 @@ class FirebaseService {
         window.location.reload();
     }
 
-    init() {
+    async init() {
+        // Wait up to 2 seconds for window.firebase to become available if CDN script is still downloading
+        for (let i = 0; i < 20; i++) {
+            if (typeof window.firebase !== 'undefined') break;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+
         if (typeof window.firebase === 'undefined') {
-            console.warn('Firebase CDN scripts not yet loaded, enabling local offline storage fallback.');
+            console.warn('Firebase CDN scripts not loaded, enabling local offline storage fallback.');
             this.enableLocalFallback();
             return;
         }
@@ -70,8 +76,22 @@ class FirebaseService {
 
             // Listen to auth state changes
             this.auth.onAuthStateChanged((user) => {
-                this.currentUser = user;
-                this.notifyAuthListeners(user);
+                if (user) {
+                    this.currentUser = user;
+                } else {
+                    // Check if local guest user session exists
+                    const savedLocalUser = localStorage.getItem('ffcs_local_user');
+                    if (savedLocalUser) {
+                        try {
+                            this.currentUser = JSON.parse(savedLocalUser);
+                        } catch (e) {
+                            this.currentUser = null;
+                        }
+                    } else {
+                        this.currentUser = null;
+                    }
+                }
+                this.notifyAuthListeners(this.currentUser);
             });
 
             this.isInitialized = true;
@@ -83,7 +103,6 @@ class FirebaseService {
 
     enableLocalFallback() {
         this.useLocalFallback = true;
-        // Check if a local session exists
         const savedLocalUser = localStorage.getItem('ffcs_local_user');
         if (savedLocalUser) {
             try {
@@ -92,7 +111,7 @@ class FirebaseService {
                 this.currentUser = null;
             }
         }
-        setTimeout(() => this.notifyAuthListeners(this.currentUser), 100);
+        setTimeout(() => this.notifyAuthListeners(this.currentUser), 50);
     }
 
     onAuthStateChanged(callback) {
@@ -124,14 +143,20 @@ class FirebaseService {
                 return result.user;
             } catch (error) {
                 console.warn('Google Popup sign-in fallback:', error.message);
-                // If popup was blocked or remote auth domain restricted, provide smooth guest/email fallback
-                if (error.code === 'auth/popup-blocked' || error.code === 'auth/unauthorized-domain' || error.code === 'auth/api-key-not-valid') {
-                    return this.signInGuest("Google User (" + (localStorage.getItem('ffcs_github_email') || 'vitstudent@vit.ac.in') + ")");
+                if (
+                    error.code === 'auth/popup-blocked' ||
+                    error.code === 'auth/unauthorized-domain' ||
+                    error.code === 'auth/api-key-not-valid' ||
+                    error.code === 'auth/internal-error'
+                ) {
+                    return this.signInGuest(
+                        'Google User (' + (localStorage.getItem('ffcs_github_email') || 'vitstudent@vit.ac.in') + ')',
+                    );
                 }
                 throw error;
             }
         } else {
-            return this.signInGuest("Google User (vitstudent@vit.ac.in)");
+            return this.signInGuest('Google User (vitstudent@vit.ac.in)');
         }
     }
 
@@ -143,8 +168,11 @@ class FirebaseService {
                 this.currentUser = cred.user;
                 return cred.user;
             } catch (error) {
-                if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/api-key-not-valid') {
-                    // Create account automatically if it doesn't exist
+                if (
+                    error.code === 'auth/user-not-found' ||
+                    error.code === 'auth/invalid-credential' ||
+                    error.code === 'auth/api-key-not-valid'
+                ) {
                     try {
                         const newCred = await this.auth.createUserWithEmailAndPassword(email, password);
                         this.currentUser = newCred.user;
@@ -180,13 +208,13 @@ class FirebaseService {
     }
 
     // Guest / Automated local account
-    signInGuest(name = 'VITian Student', email = 'vitstudent@vit.ac.in') {
+    signInGuest(name = 'VIT Chennai Student', email = 'student.chennai@vit.ac.in') {
         const guestUser = {
             uid: 'user_' + Math.random().toString(36).substring(2, 10),
             displayName: name,
             email: email,
             photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(name),
-            isAnonymous: false
+            isAnonymous: false,
         };
         this.currentUser = guestUser;
         localStorage.setItem('ffcs_local_user', JSON.stringify(guestUser));
@@ -208,7 +236,7 @@ class FirebaseService {
         this.notifyAuthListeners(null);
     }
 
-    // Save timetable to Firestore
+    // Save timetable to Firestore with timeout protection
     async saveTimetable(timetableRecord) {
         if (!this.currentUser) {
             throw new Error('Please sign in first to save your timetable to Cloud Firestore.');
@@ -223,23 +251,36 @@ class FirebaseService {
             data: timetableRecord.data || [],
             quick: timetableRecord.quick || [],
             updatedAt: new Date().toISOString(),
-            createdAt: timetableRecord.createdAt || new Date().toISOString()
+            createdAt: timetableRecord.createdAt || new Date().toISOString(),
         };
 
         if (!this.useLocalFallback && this.db) {
             try {
                 const colRef = this.db.collection('users').doc(uid).collection('timetables');
-                let docId = timetableRecord.id && typeof timetableRecord.id === 'string' && timetableRecord.id.length > 5 
-                    ? timetableRecord.id 
-                    : null;
-                
-                if (docId) {
-                    await colRef.doc(docId).set(record, { merge: true });
-                    return { id: docId, ...record };
-                } else {
-                    const doc = await colRef.add(record);
-                    return { id: doc.id, ...record };
-                }
+                const docId =
+                    timetableRecord.id &&
+                    typeof timetableRecord.id === 'string' &&
+                    timetableRecord.id.length > 5
+                        ? timetableRecord.id
+                        : null;
+
+                const remotePromise = (async () => {
+                    if (docId) {
+                        await colRef.doc(docId).set(record, { merge: true });
+                        return { id: docId, ...record };
+                    } else {
+                        const doc = await colRef.add(record);
+                        return { id: doc.id, ...record };
+                    }
+                })();
+
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Firestore sync timeout')), 3500),
+                );
+
+                const res = await Promise.race([remotePromise, timeoutPromise]);
+                this.saveLocalTimetable(uid, record, res.id);
+                return res;
             } catch (error) {
                 console.warn('Firestore remote write fallback to local storage:', error.message);
                 return this.saveLocalTimetable(uid, record, timetableRecord.id);
@@ -258,7 +299,7 @@ class FirebaseService {
             id = 'tt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
         }
         const item = { id, ...record };
-        const index = existing.findIndex(t => t.id === id);
+        const index = existing.findIndex((t) => t.id === id);
         if (index >= 0) {
             existing[index] = item;
         } else {
@@ -268,7 +309,7 @@ class FirebaseService {
         return item;
     }
 
-    // Fetch all saved timetables for current user
+    // Fetch all saved timetables for current user with timeout protection
     async getSavedTimetables() {
         if (!this.currentUser) {
             return [];
@@ -278,20 +319,32 @@ class FirebaseService {
 
         if (!this.useLocalFallback && this.db) {
             try {
-                const snapshot = await this.db.collection('users').doc(uid).collection('timetables')
-                    .orderBy('updatedAt', 'desc')
-                    .get();
-                
-                const list = [];
-                snapshot.forEach(doc => {
-                    list.push({ id: doc.id, ...doc.data() });
-                });
+                const fetchPromise = (async () => {
+                    const snapshot = await this.db
+                        .collection('users')
+                        .doc(uid)
+                        .collection('timetables')
+                        .orderBy('updatedAt', 'desc')
+                        .get();
 
-                // Also check local storage for any offline cached items
+                    const list = [];
+                    snapshot.forEach((doc) => {
+                        list.push({ id: doc.id, ...doc.data() });
+                    });
+                    return list;
+                })();
+
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Firestore fetch timeout')), 3500),
+                );
+
+                const list = await Promise.race([fetchPromise, timeoutPromise]);
+
+                // Merge with any local cache
                 const localKey = `ffcs_timetables_${uid}`;
                 const localItems = JSON.parse(localStorage.getItem(localKey) || '[]');
-                localItems.forEach(localItem => {
-                    if (!list.some(r => r.id === localItem.id)) {
+                localItems.forEach((localItem) => {
+                    if (!list.some((r) => r.id === localItem.id)) {
                         list.push(localItem);
                     }
                 });
@@ -318,7 +371,13 @@ class FirebaseService {
 
         if (!this.useLocalFallback && this.db) {
             try {
-                await this.db.collection('users').doc(uid).collection('timetables').doc(timetableId).delete();
+                this.db
+                    .collection('users')
+                    .doc(uid)
+                    .collection('timetables')
+                    .doc(timetableId)
+                    .delete()
+                    .catch((e) => console.warn(e));
             } catch (e) {
                 console.warn('Firestore delete error, removing locally:', e);
             }
@@ -326,7 +385,7 @@ class FirebaseService {
 
         const key = `ffcs_timetables_${uid}`;
         const existing = JSON.parse(localStorage.getItem(key) || '[]');
-        const updated = existing.filter(t => t.id !== timetableId);
+        const updated = existing.filter((t) => t.id !== timetableId);
         localStorage.setItem(key, JSON.stringify(updated));
     }
 }
